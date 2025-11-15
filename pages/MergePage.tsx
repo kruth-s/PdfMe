@@ -2,18 +2,26 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { FileDropzone } from '../components/FileDropzone';
 import { PdfFileList } from '../components/PdfFileList';
 import type { PdfFile } from '../types';
-import { getFileInfo, mergePdfs, selectFiles } from '../services/pdfService';
-import { PlusIcon, BackIcon, LockClosedIcon, EyeIcon, EyeSlashIcon } from '../constants';
+import { getFileInfo, mergePdfs, selectFiles, downloadFile } from '../services/pdfService';
+import { PlusIcon, BackIcon, LockClosedIcon, EyeIcon, EyeSlashIcon, SpinnerIcon, CheckCircleIcon, DownloadIcon } from '../constants';
 
 interface MergePageProps {
     onBack: () => void;
 }
 
+interface MergedFileInfo {
+    blob: Blob;
+    name: string;
+    size: string;
+}
+
 export function MergePage({ onBack }: MergePageProps): React.ReactElement {
   const [pdfFiles, setPdfFiles] = useState<PdfFile[]>([]);
   const [isMerging, setIsMerging] = useState(false);
+  const [isProcessingFiles, setIsProcessingFiles] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [mergedFile, setMergedFile] = useState<MergedFileInfo | null>(null);
 
   // State for encryption
   const [isProtectionEnabled, setIsProtectionEnabled] = useState(false);
@@ -22,6 +30,7 @@ export function MergePage({ onBack }: MergePageProps): React.ReactElement {
   const [showPassword, setShowPassword] = useState(false);
 
   const processFiles = useCallback(async (files: File[]) => {
+    setIsProcessingFiles(true);
     setError(null);
     const newPdfFiles: PdfFile[] = [];
     const existingFileSignatures = new Set(pdfFiles.map(f => `${f.name}-${f.size}`));
@@ -41,6 +50,7 @@ export function MergePage({ onBack }: MergePageProps): React.ReactElement {
     if (newPdfFiles.length > 0) {
       setPdfFiles(prev => [...prev, ...newPdfFiles]);
     }
+    setIsProcessingFiles(false);
   }, [pdfFiles]);
   
   // Effect to listen for file drops on the window
@@ -57,7 +67,6 @@ export function MergePage({ onBack }: MergePageProps): React.ReactElement {
     const handleDragLeave = (e: DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        // Use a timeout to prevent flickering when dragging over child elements
         if (!e.relatedTarget) {
             setIsDragging(false);
         }
@@ -124,13 +133,8 @@ export function MergePage({ onBack }: MergePageProps): React.ReactElement {
     setIsMerging(true);
     setError(null);
     try {
-      await mergePdfs(pdfFiles, isProtectionEnabled ? password : undefined);
-      // Reset state after successful merge
-      setPdfFiles([]);
-      setIsProtectionEnabled(false);
-      setPassword('');
-      setConfirmPassword('');
-// FIX: Explicitly type the caught error as unknown to handle potential TypeScript errors.
+      const result = await mergePdfs(pdfFiles, isProtectionEnabled ? password : undefined);
+      setMergedFile(result);
     } catch (e: unknown) {
       setError("An error occurred while merging the PDFs. Please try again.");
       console.error(e);
@@ -138,8 +142,24 @@ export function MergePage({ onBack }: MergePageProps): React.ReactElement {
       setIsMerging(false);
     }
   };
+
+  const handleDownload = () => {
+    if (mergedFile) {
+      downloadFile(mergedFile.blob, mergedFile.name);
+    }
+  };
+
+  const resetState = () => {
+    setPdfFiles([]);
+    setIsProtectionEnabled(false);
+    setPassword('');
+    setConfirmPassword('');
+    setError(null);
+    setMergedFile(null);
+  }
   
   const handleSelectClick = async () => {
+    if (isProcessingFiles) return;
     const files = await selectFiles();
     if (files.length > 0) {
         processFiles(files);
@@ -150,6 +170,7 @@ export function MergePage({ onBack }: MergePageProps): React.ReactElement {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
+    if (isProcessingFiles) return;
     const droppedFiles = e.dataTransfer?.files;
     if (droppedFiles && droppedFiles.length > 0) {
         const acceptedFiles = Array.from(droppedFiles).filter(file => file.type === 'application/pdf');
@@ -159,7 +180,7 @@ export function MergePage({ onBack }: MergePageProps): React.ReactElement {
             setError("Only PDF files are accepted.");
         }
     }
-  }, [processFiles]);
+  }, [processFiles, isProcessingFiles]);
 
 
   const totalSize = useMemo(() => {
@@ -172,6 +193,39 @@ export function MergePage({ onBack }: MergePageProps): React.ReactElement {
   }, [pdfFiles]);
 
   const isMergeDisabled = isMerging || pdfFiles.length < 2 || (isProtectionEnabled && !!passwordError);
+
+  if (mergedFile) {
+    return (
+        <div className="text-center max-w-2xl mx-auto py-16">
+            <CheckCircleIcon />
+            <h1 className="mt-4 text-3xl md:text-4xl font-bold text-gray-800">Merge Successful!</h1>
+            <p className="mt-2 text-lg text-gray-600">Your PDF has been merged and is ready for download.</p>
+            <div className="mt-8 bg-gray-50 border border-gray-200 rounded-lg p-4 flex items-center justify-between">
+                <p className="font-medium text-gray-700">{mergedFile.name}</p>
+                <p className="text-sm text-gray-500">{mergedFile.size}</p>
+            </div>
+            <div className="mt-8 flex flex-col sm:flex-row justify-center gap-4">
+                <button
+                    onClick={handleDownload}
+                    className="w-full sm:w-auto bg-red-500 text-white font-bold py-3 px-8 rounded-lg shadow-md hover:bg-red-600 transition-all duration-200 flex items-center justify-center text-lg"
+                >
+                    <DownloadIcon />
+                    Download Merged PDF
+                </button>
+                <button
+                    onClick={resetState}
+                    className="w-full sm:w-auto bg-gray-200 text-gray-800 font-bold py-3 px-8 rounded-lg hover:bg-gray-300 transition-all duration-200 text-lg"
+                >
+                    Merge More PDFs
+                </button>
+            </div>
+             <button onClick={onBack} className="mt-8 flex items-center mx-auto text-sm font-medium text-gray-600 hover:text-red-500 transition-colors">
+                <BackIcon />
+                Back to Tools
+            </button>
+        </div>
+    );
+  }
 
   return (
     <div className="relative">
@@ -189,6 +243,7 @@ export function MergePage({ onBack }: MergePageProps): React.ReactElement {
             <FileDropzone
                 onSelectClick={handleSelectClick}
                 isDragging={isDragging}
+                isProcessing={isProcessingFiles}
                 onDragEnter={() => setIsDragging(true)}
                 onDragLeave={() => setIsDragging(false)}
                 onDrop={handleDropzoneDrop}
@@ -257,8 +312,8 @@ export function MergePage({ onBack }: MergePageProps): React.ReactElement {
              </div>
 
              <div className="flex items-center gap-2 w-full md:w-auto flex-shrink-0">
-                <button onClick={handleSelectClick} className="p-3 rounded-full hover:bg-gray-200 transition-colors" aria-label="Add more files">
-                    <PlusIcon />
+                <button onClick={handleSelectClick} className="p-3 rounded-full hover:bg-gray-200 transition-colors disabled:cursor-not-allowed" aria-label="Add more files" disabled={isProcessingFiles}>
+                    {isProcessingFiles ? <SpinnerIcon /> : <PlusIcon />}
                 </button>
                 <button
                     onClick={handleMerge}

@@ -41,7 +41,7 @@ export async function getFileInfo(file: File): Promise<PdfFile> {
   };
 }
 
-export async function mergePdfs(files: PdfFile[], password?: string): Promise<void> {
+export async function mergePdfs(files: PdfFile[], password?: string): Promise<{ blob: Blob; name: string; size: string }> {
     const { PDFDocument } = PDFLib;
     const mergedPdf = await PDFDocument.create();
 
@@ -60,11 +60,19 @@ export async function mergePdfs(files: PdfFile[], password?: string): Promise<vo
 
     const mergedPdfBytes = await mergedPdf.save({ useObjectStreams: true });
     
-    // Trigger download in the browser
     const blob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
+    
+    return {
+        blob,
+        name: 'merged.pdf',
+        size: formatBytes(blob.size),
+    };
+}
+
+export function downloadFile(blob: Blob, fileName: string): void {
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = 'merged.pdf';
+    link.download = fileName;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
