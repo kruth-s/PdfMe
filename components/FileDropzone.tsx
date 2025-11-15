@@ -1,7 +1,6 @@
 import React, { useState, useCallback } from 'react';
 
 interface FileDropzoneProps {
-  onFilesAdded: (files: string[]) => void;
   onSelectClick: () => void;
   isDragging: boolean;
   onDragEnter: (e: React.DragEvent<HTMLDivElement>) => void;

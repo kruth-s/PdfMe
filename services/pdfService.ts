@@ -1,59 +1,72 @@
 import type { PdfFile } from '../types';
 
-// In a real Tauri app, you would import the `invoke` function:
-// import { invoke } from '@tauri-apps/api/tauri';
-// import { open } from '@tauri-apps/api/dialog';
+// pdf-lib is loaded from a CDN script in index.html
+declare const PDFLib: any;
 
-// Mocks for demonstration purposes, to be replaced with Tauri API calls.
-const invoke = async (command: string, args?: any): Promise<any> => {
-  console.log(`Invoking backend command: ${command}`, args);
-  // Simulate backend processing delay
-  await new Promise(resolve => setTimeout(resolve, 1000));
+function formatBytes(bytes: number, decimals = 2): string {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}
 
-  if (command === 'get_file_info') {
-    // Mock response for file info
-    return {
-        id: `${args.filePath}-${Date.now()}`,
-        path: args.filePath,
-        name: args.filePath.split(/[\\/]/).pop() || 'unknown.pdf',
-        pageCount: Math.floor(Math.random() * 20) + 1, // random page count
-        size: `${(Math.random() * 5).toFixed(2)} MB`,
+export async function selectFiles(): Promise<File[]> {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.accept = 'application/pdf';
+    input.onchange = () => {
+      resolve(input.files ? Array.from(input.files) : []);
     };
-  }
-  if (command === 'merge_pdfs') {
-      // Mock a successful merge by returning a fake path
-      return 'path/to/merged.pdf';
-  }
-  return null;
-};
-
-export async function selectFiles(): Promise<string[]> {
-    // REAL IMPLEMENTATION:
-    // const selected = await open({
-    //   multiple: true,
-    //   filters: [{ name: 'PDF', extensions: ['pdf'] }]
-    // });
-    // return Array.isArray(selected) ? selected : (selected ? [selected] : []);
-
-    // MOCK IMPLEMENTATION:
-    alert("This would open a native file dialog. Using mock files for now.");
-    return ["C:/Users/Demo/Documents/report.pdf", "C:/Users/Demo/Documents/presentation.pdf"];
+    input.click();
+  });
 }
 
-export async function getFileInfo(filePath: string): Promise<PdfFile> {
-  // REAL IMPLEMENTATION:
-  // return await invoke('get_file_info', { filePath });
+export async function getFileInfo(file: File): Promise<PdfFile> {
+  const { PDFDocument } = PDFLib;
+  const fileBuffer = await file.arrayBuffer();
+  const pdfDoc = await PDFDocument.load(fileBuffer, { 
+      ignoreEncryption: true // Allows reading page count of encrypted files
+  });
   
-  // MOCK IMPLEMENTATION:
-  return await invoke('get_file_info', { filePath });
+  return {
+    id: `${file.name}-${file.lastModified}-${file.size}`,
+    file: file,
+    name: file.name,
+    pageCount: pdfDoc.getPageCount(),
+    size: formatBytes(file.size),
+  };
 }
 
-export async function mergePdfs(filePaths: string[]): Promise<string> {
-  // REAL IMPLEMENTATION:
-  // return await invoke('merge_pdfs', { filePaths });
+export async function mergePdfs(files: PdfFile[], password?: string): Promise<void> {
+    const { PDFDocument } = PDFLib;
+    const mergedPdf = await PDFDocument.create();
 
-  // MOCK IMPLEMENTATION:
-  const resultPath = await invoke('merge_pdfs', { filePaths });
-  alert(`PDFs merged successfully! Saved to: ${resultPath}`);
-  return resultPath;
+    for (const pdfFile of files) {
+        const fileBuffer = await pdfFile.file.arrayBuffer();
+        // Load the PDF, ignoring encryption for compatibility
+        const pdfDoc = await PDFDocument.load(fileBuffer, { ignoreEncryption: true });
+        const copiedPages = await mergedPdf.copyPages(pdfDoc, pdfDoc.getPageIndices());
+        copiedPages.forEach((page) => mergedPdf.addPage(page));
+    }
+    
+    if (password) {
+        console.warn("PDF Encryption is not supported by the client-side pdf-lib library. The merged file will not be password protected.");
+        alert("Password protection is not supported in this version. The merged PDF will be created without encryption.");
+    }
+
+    const mergedPdfBytes = await mergedPdf.save({ useObjectStreams: true });
+    
+    // Trigger download in the browser
+    const blob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'merged.pdf';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
 }

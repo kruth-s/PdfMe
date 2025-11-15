@@ -1,6 +1,6 @@
 export interface PdfFile {
   id: string;
-  path: string; // In Tauri, we work with file paths, not File objects
+  file: File; // In the browser, we work with File objects
   name: string;
   pageCount: number;
   size: string;
