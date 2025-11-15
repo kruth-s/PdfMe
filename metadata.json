@@ -1,0 +1,5 @@
+{
+  "name": "PDF Fusion",
+  "description": "An offline-first, client-side PDF merging tool inspired by iLovePDF. Drag and drop your files, reorder them, and merge them into a single PDF right in your browser. No uploads, completely private.",
+  "requestFramePermissions": []
+}
