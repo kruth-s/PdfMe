@@ -2,8 +2,14 @@ import React, { useState, useCallback } from 'react';
 import { Header } from './components/Header';
 import { HomePage } from './pages/HomePage';
 import { MergePage } from './pages/MergePage';
+import { SplitPage } from './pages/SplitPage';
+import { RotatePage } from './pages/RotatePage';
+import { CompressPage } from './pages/CompressPage';
+import { JpgToPdfPage } from './pages/JpgToPdfPage';
+import { UnsupportedFeaturePage } from './pages/UnsupportedFeaturePage';
 
-export type Page = 'home' | 'merge' | 'split' | 'compress'; // Add other tool pages here
+
+export type Page = 'home' | 'merge' | 'split' | 'compress' | 'rotate' | 'jpg-to-pdf' | 'word-to-pdf' | 'ppt-to-pdf' | 'excel-to-pdf'; // Add other tool pages here
 
 export default function App(): React.ReactElement {
   const [currentPage, setCurrentPage] = useState<Page>('home');
@@ -16,6 +22,18 @@ export default function App(): React.ReactElement {
     switch (currentPage) {
       case 'merge':
         return <MergePage onBack={() => navigateTo('home')} />;
+      case 'split':
+        return <SplitPage onBack={() => navigateTo('home')} />;
+      case 'rotate':
+        return <RotatePage onBack={() => navigateTo('home')} />;
+      case 'compress':
+        return <CompressPage onBack={() => navigateTo('home')} />;
+      case 'jpg-to-pdf':
+        return <JpgToPdfPage onBack={() => navigateTo('home')} />;
+      case 'word-to-pdf':
+      case 'ppt-to-pdf':
+      case 'excel-to-pdf':
+        return <UnsupportedFeaturePage onBack={() => navigateTo('home')} />;
       case 'home':
       default:
         return <HomePage onToolSelect={navigateTo} />;
